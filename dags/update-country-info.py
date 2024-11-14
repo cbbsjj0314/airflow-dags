@@ -59,10 +59,27 @@ def load(schema, table, records):
     cur = get_Redshift_connection()
     try:
         cur.execute("BEGIN;")
-        cur.execute(f"SELECT to_regclass('{schema}.{table}');")  # 테이블 존재 여부 확인 => 존재하면 OID 반환, 없으면 NULL 반환
-        result = cur.fetchone()  # 반환된 값의 row 1개만 가져오는데 앞서 실행한 SQL 덕에 OID or NULL이 저장됨
-        if result[0]:
-            cur.execute(f"TRUNCATE TABLE {schema}.{table};")
+
+        ########## to_regclass()를 지원하지 않는 듯
+        ########## PostgreSQL에선 가능한데 Redshift는 지원 안 한대
+        # cur.execute(f"SELECT to_regclass('{schema}.{table}'::text);")  # 테이블 존재 여부 확인 => 존재하면 OID 반환, 없으면 NULL 반환
+        # result = cur.fetchone()  # 반환된 값의 row 1개만 가져오는데 앞서 실행한 명령 덕에 OID or NULL이 저장됨
+        # if result[0]:
+        #     cur.execute(f"TRUNCATE TABLE {schema}.{table};")
+        # else:
+        #     logging.warning(f"Table {schema}.{table} does not exist. Skipping TRUNCATE.")
+        
+        # 테이블 존재 여부 확인
+        cur.execute(f"""
+            SELECT COUNT(*)
+            FROM information_schema.tables
+            WHERE table_schema = '{schema}'
+            AND table_name = '{table}';
+        """)
+        result = cur.fetchone()
+
+        if result[0] > 0:  # 겹치는 테이블 이름이 있을 수도 있으므로 > 0 조건을 사용함
+            cur.execute(f"TRUNCATE TABLE {schema}.{table};")  # 테이블이 존재하면 TRUNCATE 실행
         else:
             logging.warning(f"Table {schema}.{table} does not exist. Skipping TRUNCATE.")
 
